@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Basic Auth Helper",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "複数URL指定に応じてBasic認証を自動入力するChrome拡張",
   "permissions": [
     "storage",
@@ -14,5 +14,9 @@
   "background": {
     "service_worker": "service_worker.js"
   },
-  "options_page": "options.html"
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Basic Auth Helper",
+    "default_popup": "popup.html"
+  }
 }

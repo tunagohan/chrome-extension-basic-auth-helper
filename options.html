@@ -6,28 +6,56 @@
     <style>
       body {
         font-family: sans-serif;
-        max-width: 1100px;
+        max-width: 1200px;
         margin: 24px auto;
         padding: 0 16px;
       }
 
       h1 {
         font-size: 24px;
+        margin-bottom: 8px;
+      }
+
+      p {
+        margin-top: 0;
+      }
+
+      .header {
+        display: grid;
+        grid-template-columns: 1fr 1fr 2.4fr 100px 90px;
+        gap: 8px;
+        font-weight: bold;
+        margin: 16px 0 8px;
       }
 
       .row {
         display: grid;
-        grid-template-columns: 1fr 1fr 2.4fr auto auto;
+        grid-template-columns: 1fr 1fr 2.4fr 100px 90px;
         gap: 8px;
-        margin-bottom: 8px;
-        align-items: center;
+        align-items: start;
+        margin-bottom: 12px;
       }
 
       input[type="text"],
-      input[type="password"] {
+      input[type="password"],
+      textarea {
         width: 100%;
-        padding: 8px;
         box-sizing: border-box;
+        padding: 8px;
+        font-size: 14px;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+        font-family: monospace;
+      }
+
+      .checkbox-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
       }
 
       button {
@@ -35,60 +63,59 @@
         cursor: pointer;
       }
 
-      .header {
-        font-weight: bold;
-        margin-top: 16px;
-      }
-
-      .mono {
-        font-family: monospace;
-      }
-
-      #message {
-        margin: 12px 0;
-        color: green;
-        min-height: 1.2em;
-      }
-
       .toolbar {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-        margin-top: 16px;
-        margin-bottom: 12px;
+        margin: 16px 0 12px;
+      }
+
+      #message {
+        min-height: 1.4em;
+        margin: 8px 0 20px;
       }
 
       .section {
         margin-top: 24px;
       }
 
-      textarea {
-        width: 100%;
-        min-height: 220px;
-        box-sizing: border-box;
-        padding: 12px;
+      .mono {
         font-family: monospace;
-        font-size: 13px;
       }
 
       .help {
         color: #555;
         font-size: 13px;
         margin-top: 8px;
+        line-height: 1.5;
+      }
+
+      #jsonArea {
+        width: 100%;
+        min-height: 260px;
+        box-sizing: border-box;
+        padding: 12px;
+        font-family: monospace;
+        font-size: 13px;
+      }
+
+      .delete-wrap {
+        display: flex;
+        align-items: start;
       }
     </style>
   </head>
   <body>
     <h1>Basic Auth Helper</h1>
-
     <p>
-      URLごとに <span class="mono">id / password / 正規表現</span> を登録します。
+      <span class="mono">id / password / 複数URL</span> を登録して、
+      Basic認証を自動入力します。URLは1行に1つ入力してください。
     </p>
 
-    <div class="row header">
+    <div class="header">
       <div>ID</div>
       <div>Password</div>
-      <div>URL Regex</div>
+      <div>URLs (1行に1URL)</div>
       <div>Enabled</div>
       <div>Action</div>
     </div>
@@ -96,14 +123,19 @@
     <div id="rules"></div>
 
     <div class="toolbar">
-      <button id="addRule">行を追加</button>
-      <button id="save">保存</button>
-      <button id="exportRules">Export JSON</button>
-      <button id="copyExportedJson">Export内容をコピー</button>
-      <button id="importRules">Import JSONを反映</button>
-      <button id="downloadRules">JSONをダウンロード</button>
-      <button id="loadFileButton">JSONファイルを読み込む</button>
-      <input id="importFile" type="file" accept="application/json,.json" style="display: none;" />
+      <button id="addRule" type="button">行を追加</button>
+      <button id="save" type="button">保存</button>
+      <button id="exportRules" type="button">Export JSON</button>
+      <button id="copyExportedJson" type="button">Export内容をコピー</button>
+      <button id="importRules" type="button">Import JSONを反映</button>
+      <button id="downloadRules" type="button">JSONをダウンロード</button>
+      <button id="loadFileButton" type="button">JSONファイルを読み込む</button>
+      <input
+        id="importFile"
+        type="file"
+        accept="application/json,.json"
+        style="display: none;"
+      />
     </div>
 
     <div id="message"></div>
@@ -115,8 +147,20 @@
         placeholder="ここにExport結果が表示されます。Importしたい場合はここにJSONを貼り付けてください。"
       ></textarea>
       <div class="help">
-        JSON形式:
-        <span class="mono">[{ "id": "...", "password": "...", "urlPattern": "...", "enabled": true }]</span>
+        JSON例:
+        <div class="mono">
+[
+  {
+    "id": "your-id",
+    "password": "your-password",
+    "urls": [
+      "https://work.andpaddev.xyz",
+      "https://develop-work.andpaddev.xyz/"
+    ],
+    "enabled": true
+  }
+]
+        </div>
       </div>
     </div>
 

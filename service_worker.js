@@ -1,33 +1,28 @@
 const MAX_RETRY_PER_REQUEST = 2;
-
-// requestIdごとの認証試行回数を保持
 const requestAttempts = new Map();
-
-/**
- * 保存データ例:
- * [
- *   {
- *     id: "user1",
- *     password: "pass1",
- *     urlPattern: "^https://(?:(?:(?:feature\\d*|develop)-)?work\\.andpaddev\\.xyz|staging(?:3)?\\.andpaddev\\.xyz)/?$",
- *     enabled: true
- *   }
- * ]
- */
 
 async function getRules() {
   const result = await chrome.storage.local.get(["authRules"]);
   return Array.isArray(result.authRules) ? result.authRules : [];
 }
 
-function safeTestRegex(pattern, url) {
+function normalizeUrl(url) {
   try {
-    const re = new RegExp(pattern);
-    return re.test(url);
-  } catch (e) {
-    console.warn("Invalid regex:", pattern, e);
-    return false;
+    const parsed = new URL(url);
+    const pathname =
+      parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/+$/, "");
+
+    return `${parsed.protocol}//${parsed.host}${pathname}`;
+  } catch {
+    return String(url || "").trim().replace(/\/+$/, "");
   }
+}
+
+function matchUrl(ruleUrls, targetUrl) {
+  if (!Array.isArray(ruleUrls) || ruleUrls.length === 0) return false;
+
+  const normalizedTarget = normalizeUrl(targetUrl);
+  return ruleUrls.some((url) => normalizeUrl(url) === normalizedTarget);
 }
 
 chrome.webRequest.onAuthRequired.addListener(
@@ -42,33 +37,40 @@ chrome.webRequest.onAuthRequired.addListener(
 
     requestAttempts.set(requestId, count + 1);
 
-    const rules = await getRules();
+    try {
+      const rules = await getRules();
 
-    const matchedRule = rules.find((rule) => {
-      return rule.enabled !== false &&
-        typeof rule.id === "string" &&
-        typeof rule.password === "string" &&
-        typeof rule.urlPattern === "string" &&
-        safeTestRegex(rule.urlPattern, details.url);
-    });
+      const matchedRule = rules.find((rule) => {
+        return (
+          rule &&
+          rule.enabled !== false &&
+          typeof rule.id === "string" &&
+          typeof rule.password === "string" &&
+          Array.isArray(rule.urls) &&
+          matchUrl(rule.urls, details.url)
+        );
+      });
 
-    if (!matchedRule) {
-      callback({});
-      return;
-    }
-
-    callback({
-      authCredentials: {
-        username: matchedRule.id,
-        password: matchedRule.password
+      if (!matchedRule) {
+        callback({});
+        return;
       }
-    });
+
+      callback({
+        authCredentials: {
+          username: matchedRule.id,
+          password: matchedRule.password
+        }
+      });
+    } catch (error) {
+      console.error("onAuthRequired error:", error);
+      callback({});
+    }
   },
   { urls: ["<all_urls>"] },
   ["asyncBlocking"]
 );
 
-// リクエスト完了後に掃除
 chrome.webRequest.onCompleted.addListener(
   (details) => {
     requestAttempts.delete(details.requestId);

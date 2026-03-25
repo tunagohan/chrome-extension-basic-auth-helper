@@ -13,6 +13,7 @@ const message = document.getElementById("message");
 function showMessage(text, isError = false) {
   message.textContent = text;
   message.style.color = isError ? "crimson" : "green";
+
   setTimeout(() => {
     if (message.textContent === text) {
       message.textContent = "";
@@ -20,76 +21,9 @@ function showMessage(text, isError = false) {
   }, 3000);
 }
 
-function createRuleRow(rule = {}) {
-  const row = document.createElement("div");
-  row.className = "row";
-
-  const idInput = document.createElement("input");
-  idInput.type = "text";
-  idInput.placeholder = "ID";
-  idInput.value = rule.id || "";
-
-  const passwordInput = document.createElement("input");
-  passwordInput.type = "password";
-  passwordInput.placeholder = "Password";
-  passwordInput.value = rule.password || "";
-
-  const urlPatternInput = document.createElement("input");
-  urlPatternInput.type = "text";
-  urlPatternInput.placeholder = "^https://example\\.com/?$";
-  urlPatternInput.value = rule.urlPattern || "";
-
-  const enabledInput = document.createElement("input");
-  enabledInput.type = "checkbox";
-  enabledInput.checked = rule.enabled !== false;
-
-  const deleteButton = document.createElement("button");
-  deleteButton.type = "button";
-  deleteButton.textContent = "削除";
-  deleteButton.addEventListener("click", () => row.remove());
-
-  row.appendChild(idInput);
-  row.appendChild(passwordInput);
-  row.appendChild(urlPatternInput);
-  row.appendChild(enabledInput);
-  row.appendChild(deleteButton);
-
-  row.getValue = () => ({
-    id: idInput.value.trim(),
-    password: passwordInput.value,
-    urlPattern: urlPatternInput.value.trim(),
-    enabled: enabledInput.checked
-  });
-
-  return row;
-}
-
-async function getStoredRules() {
-  const result = await chrome.storage.local.get(["authRules"]);
-  return Array.isArray(result.authRules) ? result.authRules : [];
-}
-
-async function loadRules() {
-  const rules = await getStoredRules();
-
-  rulesContainer.innerHTML = "";
-
-  if (rules.length === 0) {
-    rulesContainer.appendChild(createRuleRow());
-    jsonArea.value = "[]";
-    return;
-  }
-
-  for (const rule of rules) {
-    rulesContainer.appendChild(createRuleRow(rule));
-  }
-
-  jsonArea.value = JSON.stringify(rules, null, 2);
-}
-
-function validateRegex(pattern) {
+function isValidUrl(value) {
   try {
-    new RegExp(pattern);
+    new URL(value);
     return true;
   } catch {
     return false;
@@ -100,7 +34,9 @@ function normalizeRule(rawRule) {
   return {
     id: typeof rawRule.id === "string" ? rawRule.id.trim() : "",
     password: typeof rawRule.password === "string" ? rawRule.password : "",
-    urlPattern: typeof rawRule.urlPattern === "string" ? rawRule.urlPattern.trim() : "",
+    urls: Array.isArray(rawRule.urls)
+      ? rawRule.urls.map((url) => String(url).trim()).filter(Boolean)
+      : [],
     enabled: rawRule.enabled !== false
   };
 }
@@ -125,40 +61,116 @@ function validateRules(rules) {
       throw new Error(`${index + 1}件目: password を入力してください`);
     }
 
-    if (!rule.urlPattern) {
-      throw new Error(`${index + 1}件目: urlPattern を入力してください`);
+    if (!Array.isArray(rule.urls) || rule.urls.length === 0) {
+      throw new Error(`${index + 1}件目: urls を1件以上入力してください`);
     }
 
-    if (!validateRegex(rule.urlPattern)) {
-      throw new Error(`${index + 1}件目: urlPattern の正規表現が不正です`);
-    }
+    rule.urls.forEach((url, urlIndex) => {
+      if (!isValidUrl(url)) {
+        throw new Error(
+          `${index + 1}件目 urls の ${urlIndex + 1}番目: URL形式が不正です`
+        );
+      }
+    });
+  });
+}
+
+function createRuleRow(rule = {}) {
+  const normalized = normalizeRule(rule);
+
+  const row = document.createElement("div");
+  row.className = "row";
+
+  const idInput = document.createElement("input");
+  idInput.type = "text";
+  idInput.placeholder = "ID";
+  idInput.value = normalized.id;
+
+  const passwordInput = document.createElement("input");
+  passwordInput.type = "password";
+  passwordInput.placeholder = "Password";
+  passwordInput.value = normalized.password;
+
+  const urlsTextarea = document.createElement("textarea");
+  urlsTextarea.placeholder = [
+    "https://work.andpaddev.xyz",
+    "https://develop-work.andpaddev.xyz/",
+    "https://staging.andpaddev.xyz/"
+  ].join("\n");
+  urlsTextarea.value = normalized.urls.join("\n");
+
+  const enabledWrap = document.createElement("div");
+  enabledWrap.className = "checkbox-wrap";
+
+  const enabledInput = document.createElement("input");
+  enabledInput.type = "checkbox";
+  enabledInput.checked = normalized.enabled;
+  enabledWrap.appendChild(enabledInput);
+
+  const deleteWrap = document.createElement("div");
+  deleteWrap.className = "delete-wrap";
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.textContent = "削除";
+  deleteButton.addEventListener("click", () => row.remove());
+  deleteWrap.appendChild(deleteButton);
+
+  row.appendChild(idInput);
+  row.appendChild(passwordInput);
+  row.appendChild(urlsTextarea);
+  row.appendChild(enabledWrap);
+  row.appendChild(deleteWrap);
+
+  row.getValue = () => ({
+    id: idInput.value.trim(),
+    password: passwordInput.value,
+    urls: urlsTextarea.value
+      .split("\n")
+      .map((v) => v.trim())
+      .filter(Boolean),
+    enabled: enabledInput.checked
+  });
+
+  return row;
+}
+
+function renderRules(rules) {
+  rulesContainer.innerHTML = "";
+
+  if (!Array.isArray(rules) || rules.length === 0) {
+    rulesContainer.appendChild(createRuleRow());
+    return;
+  }
+
+  rules.forEach((rule) => {
+    rulesContainer.appendChild(createRuleRow(rule));
   });
 }
 
 function collectRulesFromForm() {
   return [...rulesContainer.children]
     .map((row) => row.getValue())
-    .filter((rule) => rule.id || rule.password || rule.urlPattern)
+    .filter((rule) => rule.id || rule.password || rule.urls.length > 0)
     .map(normalizeRule);
 }
 
-function renderRules(rules) {
-  rulesContainer.innerHTML = "";
+async function getStoredRules() {
+  const result = await chrome.storage.local.get(["authRules"]);
+  return Array.isArray(result.authRules) ? result.authRules : [];
+}
 
-  if (rules.length === 0) {
-    rulesContainer.appendChild(createRuleRow());
-    return;
-  }
-
-  for (const rule of rules) {
-    rulesContainer.appendChild(createRuleRow(rule));
-  }
+async function loadRules() {
+  const rules = await getStoredRules();
+  renderRules(rules);
+  jsonArea.value = JSON.stringify(rules, null, 2);
 }
 
 async function saveRules() {
   try {
     const rules = collectRulesFromForm();
     validateRules(rules);
+
     await chrome.storage.local.set({ authRules: rules });
     jsonArea.value = JSON.stringify(rules, null, 2);
     showMessage("保存しました");
@@ -202,8 +214,8 @@ async function importRulesFromTextarea() {
     validateRules(parsed);
 
     const normalizedRules = parsed.map(normalizeRule);
-
     await chrome.storage.local.set({ authRules: normalizedRules });
+
     renderRules(normalizedRules);
     jsonArea.value = JSON.stringify(normalizedRules, null, 2);
     showMessage("Importしました");
@@ -226,7 +238,13 @@ function downloadRules() {
 
     const now = new Date();
     const pad = (value) => String(value).padStart(2, "0");
-    const filename = `basic-auth-rules-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.json`;
+    const filename =
+      `basic-auth-rules-${now.getFullYear()}` +
+      `${pad(now.getMonth() + 1)}` +
+      `${pad(now.getDate())}-` +
+      `${pad(now.getHours())}` +
+      `${pad(now.getMinutes())}` +
+      `${pad(now.getSeconds())}.json`;
 
     const a = document.createElement("a");
     a.href = url;
@@ -252,8 +270,8 @@ function loadJsonFile(file) {
       validateRules(parsed);
 
       const normalizedRules = parsed.map(normalizeRule);
-      jsonArea.value = JSON.stringify(normalizedRules, null, 2);
       renderRules(normalizedRules);
+      jsonArea.value = JSON.stringify(normalizedRules, null, 2);
       showMessage("JSONファイルを読み込みました。必要なら Import JSONを反映 を押してください");
     } catch (error) {
       showMessage(error.message || "JSONファイルの読み込みに失敗しました", true);
